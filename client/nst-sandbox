@@ -1,0 +1,419 @@
+#!/bin/bash
+# nst-sandbox — NST Sandbox CLI v2
+# Multi-instance container management for students.
+# Install: curl -sL https://sandbox.nstsdc.org/install | bash
+
+set -euo pipefail
+
+API_URL="${NST_SANDBOX_API:-https://sandbox.nstsdc.org}"
+CONFIG_DIR="$HOME/.nst-sandbox"
+CONFIG_FILE="$CONFIG_DIR/instances.json"
+VERSION="2.0.0"
+
+# ── Helpers ──────────────────────────────────────────────
+
+ensure_config() {
+    mkdir -p "$CONFIG_DIR"
+    [[ -f "$CONFIG_FILE" ]] || echo '{}' > "$CONFIG_FILE"
+    chmod 600 "$CONFIG_FILE"
+}
+
+# Save instance token to local config
+save_instance() {
+    local name="$1" token="$2" password="$3"
+    ensure_config
+    local tmp=$(mktemp)
+    # Add or update entry using sed/awk (no jq dependency)
+    python3 -c "
+import json, sys
+f = '$CONFIG_FILE'
+d = json.load(open(f))
+d['$name'] = {'token': '$token', 'password': '$password'}
+json.dump(d, open('$tmp', 'w'), indent=2)
+" 2>/dev/null && mv "$tmp" "$CONFIG_FILE" || {
+        # Fallback if python3 not available: simple grep/replace
+        rm -f "$tmp"
+        # Just append — not perfect but works
+        echo "  Warning: could not save to config (install python3 for better experience)"
+    }
+    chmod 600 "$CONFIG_FILE"
+}
+
+# Get token for an instance
+get_token() {
+    local name="$1"
+    ensure_config
+    python3 -c "
+import json
+d = json.load(open('$CONFIG_FILE'))
+e = d.get('$name', {})
+print(e.get('token', ''))
+" 2>/dev/null || echo ""
+}
+
+# Get password for an instance
+get_password() {
+    local name="$1"
+    ensure_config
+    python3 -c "
+import json
+d = json.load(open('$CONFIG_FILE'))
+e = d.get('$name', {})
+print(e.get('password', ''))
+" 2>/dev/null || echo ""
+}
+
+# Remove instance from config
+remove_instance() {
+    local name="$1"
+    ensure_config
+    local tmp=$(mktemp)
+    python3 -c "
+import json
+f = '$CONFIG_FILE'
+d = json.load(open(f))
+d.pop('$name', None)
+json.dump(d, open('$tmp', 'w'), indent=2)
+" 2>/dev/null && mv "$tmp" "$CONFIG_FILE" || rm -f "$tmp"
+}
+
+# List local instances from config
+list_local() {
+    ensure_config
+    python3 -c "
+import json
+d = json.load(open('$CONFIG_FILE'))
+for name in sorted(d.keys()):
+    print(name)
+" 2>/dev/null || echo ""
+}
+
+# API call helper
+api_call() {
+    local method="$1" endpoint="$2"
+    shift 2
+    curl -sf -X "$method" "$API_URL$endpoint" "$@" 2>/dev/null
+}
+
+# ── Commands ─────────────────────────────────────────────
+
+cmd_images() {
+    echo "📦 Available images:"
+    echo ""
+
+    local resp
+    resp=$(api_call GET /api/images) || { echo "❌ Could not reach API at $API_URL"; exit 1; }
+
+    python3 -c "
+import json, sys
+data = json.loads('''$resp''')
+images = data.get('images', [])
+for i, img in enumerate(images, 1):
+    print(f'  {i}. {img[\"id\"]:20s} {img[\"name\"]}')
+    if img.get('description'):
+        print(f'     {img[\"description\"]}')
+    print()
+tiers = data.get('tiers', {})
+print('⚙️  Compute tiers:')
+for tid in sorted(tiers):
+    t = tiers[tid]
+    print(f'  {tid}: {t[\"label\"]}')
+print()
+storage = data.get('storage', {})
+print('💾 Storage tiers:')
+for sid in sorted(storage):
+    s = storage[sid]
+    print(f'  {sid}: {s[\"label\"]}')
+" 2>/dev/null || {
+        echo "$resp"
+    }
+}
+
+cmd_create() {
+    local name="" image="" tier="" storage="" ephemeral="false"
+
+    # Parse flags
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --image)    image="$2"; shift 2 ;;
+            --tier)     tier="$2"; shift 2 ;;
+            --storage)  storage="$2"; shift 2 ;;
+            --24h)      ephemeral="true"; shift ;;
+            -*)         echo "Unknown flag: $1"; exit 1 ;;
+            *)          name="$1"; shift ;;
+        esac
+    done
+
+    # Interactive if missing fields
+    if [[ -z "$name" ]]; then
+        read -rp "Instance name: " name
+    fi
+
+    if [[ -z "$name" || ${#name} -lt 3 ]]; then
+        echo "❌ Name must be at least 3 characters (lowercase, numbers, hyphens)"
+        exit 1
+    fi
+
+    # Fetch available options
+    local resp
+    resp=$(api_call GET /api/images) || { echo "❌ Could not reach API at $API_URL"; exit 1; }
+
+    if [[ -z "$image" ]]; then
+        echo ""
+        echo "📦 Available images:"
+        python3 -c "
+import json
+data = json.loads('''$resp''')
+for i, img in enumerate(data.get('images', []), 1):
+    desc = f' — {img[\"description\"]}' if img.get('description') else ''
+    print(f'  {i}. {img[\"id\"]}{desc}')
+" 2>/dev/null
+        echo ""
+        read -rp "Select image (id or number): " choice
+
+        image=$(python3 -c "
+import json
+data = json.loads('''$resp''')
+images = data.get('images', [])
+choice = '$choice'
+if choice.isdigit() and 1 <= int(choice) <= len(images):
+    print(images[int(choice)-1]['id'])
+else:
+    print(choice)
+" 2>/dev/null)
+    fi
+
+    if [[ -z "$tier" ]]; then
+        echo ""
+        echo "⚙️  Compute tier:"
+        echo "  T1: 0.5 vCPU, 512MB RAM"
+        echo "  T2: 1 vCPU, 1GB RAM"
+        echo "  T3: 2 vCPU, 2GB RAM"
+        echo ""
+        read -rp "Select tier [T1/T2/T3] (default: T1): " tier
+        tier="${tier:-T1}"
+    fi
+
+    if [[ -z "$storage" ]]; then
+        echo ""
+        echo "💾 Storage (for your files, separate from OS):"
+        echo "  S1: 500MB   S2: 1GB   S3: 2GB   S4: 5GB   S5: 10GB"
+        echo ""
+        read -rp "Select storage [S1-S5] (default: S1): " storage
+        storage="${storage:-S1}"
+    fi
+
+    if [[ "$ephemeral" != "true" ]]; then
+        echo ""
+        echo "⏱  Lifespan:"
+        echo "  1. Persistent (lives until you destroy it)"
+        echo "  2. 24-hour (auto-deleted after 24 hours)"
+        echo ""
+        read -rp "Select [1/2] (default: 1): " lifespan
+        [[ "$lifespan" == "2" ]] && ephemeral="true"
+    fi
+
+    if [[ "$ephemeral" == "true" ]]; then
+        echo ""
+        echo "⚠️  This instance will be automatically deleted after 24 hours."
+        read -rp "Continue? [y/N]: " confirm
+        [[ "$confirm" != "y" && "$confirm" != "Y" ]] && { echo "Cancelled."; exit 0; }
+    fi
+
+    echo ""
+    echo "⏳ Provisioning $name..."
+
+    local create_resp
+    create_resp=$(curl -sf -X POST "$API_URL/api/instances" \
+        -H "Content-Type: application/json" \
+        -d "{\"name\":\"$name\",\"image\":\"$image\",\"tier\":\"$(echo $tier | tr a-z A-Z)\",\"storage\":\"$(echo $storage | tr a-z A-Z)\",\"ephemeral\":$ephemeral}") || {
+        echo "❌ Failed to create instance. Check: $API_URL"
+        exit 1
+    }
+
+    local ok
+    ok=$(python3 -c "import json; print(json.loads('''$create_resp''').get('ok', False))" 2>/dev/null)
+
+    if [[ "$ok" != "True" ]]; then
+        local err
+        err=$(python3 -c "import json; print(json.loads('''$create_resp''').get('error', 'Unknown error'))" 2>/dev/null)
+        echo "❌ $err"
+        exit 1
+    fi
+
+    # Extract fields and save
+    local token password inst_url
+    token=$(python3 -c "import json; d=json.loads('''$create_resp''')['instance']; print(d['token'])" 2>/dev/null)
+    password=$(python3 -c "import json; d=json.loads('''$create_resp''')['instance']; print(d['password'])" 2>/dev/null)
+    inst_url=$(python3 -c "import json; d=json.loads('''$create_resp''')['instance']; print(d.get('url',''))" 2>/dev/null)
+
+    save_instance "$name" "$token" "$password"
+
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "  🎓 Instance: $name"
+    echo ""
+    echo "  🖥  Image:    $image"
+    echo "  ⚙️  Tier:     $(echo $tier | tr a-z A-Z)"
+    echo "  💾  Storage:  $(echo $storage | tr a-z A-Z)"
+    [[ "$ephemeral" == "true" ]] && echo "  ⏱  Expires:  24 hours"
+    echo ""
+    echo "  🔑 SSH:      nst-sandbox ssh $name"
+    echo "  🔒 Password: $password"
+    echo "  🌐 URL:      $inst_url"
+    echo ""
+    echo "  Connect:     nst-sandbox ssh $name"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+}
+
+cmd_list() {
+    ensure_config
+    local names
+    names=$(list_local)
+
+    if [[ -z "$names" ]]; then
+        echo "No instances. Create one: nst-sandbox create <name>"
+        return
+    fi
+
+    echo ""
+    echo "Your instances:"
+    echo ""
+    printf "  %-20s %-15s %-6s %-6s %-10s\n" "NAME" "IMAGE" "TIER" "STORE" "STATUS"
+    printf "  %-20s %-15s %-6s %-6s %-10s\n" "----" "-----" "----" "-----" "------"
+
+    while IFS= read -r name; do
+        [[ -z "$name" ]] && continue
+        local info
+        info=$(api_call GET "/api/instances/$name") || { printf "  %-20s (unreachable)\n" "$name"; continue; }
+
+        local img tier storage status
+        img=$(python3 -c "import json; print(json.loads('''$info''').get('instance',{}).get('image_id','?'))" 2>/dev/null || echo "?")
+        tier=$(python3 -c "import json; print(json.loads('''$info''').get('instance',{}).get('tier','?'))" 2>/dev/null || echo "?")
+        storage=$(python3 -c "import json; print(json.loads('''$info''').get('instance',{}).get('storage','?'))" 2>/dev/null || echo "?")
+        status=$(python3 -c "import json; print(json.loads('''$info''').get('instance',{}).get('status','?'))" 2>/dev/null || echo "?")
+
+        printf "  %-20s %-15s %-6s %-6s %-10s\n" "$name" "$img" "$tier" "$storage" "$status"
+    done <<< "$names"
+    echo ""
+}
+
+cmd_ssh() {
+    local name="${1:-}"
+    if [[ -z "$name" ]]; then
+        echo "Usage: nst-sandbox ssh <name>"
+        exit 1
+    fi
+
+    local password
+    password=$(get_password "$name")
+
+    if ! command -v cloudflared &>/dev/null; then
+        echo "❌ cloudflared not installed. Run: curl -sL https://sandbox.nstsdc.org/install | bash"
+        exit 1
+    fi
+
+    [[ -n "$password" ]] && echo "🔒 Password: $password"
+    echo "🔌 Connecting to $name..."
+    exec ssh -o StrictHostKeyChecking=no \
+        -o ProxyCommand="cloudflared access ssh --hostname sandbox-ssh.nstsdc.org" \
+        "$name@sandbox-ssh.nstsdc.org"
+}
+
+cmd_info() {
+    local name="${1:-}"
+    if [[ -z "$name" ]]; then
+        echo "Usage: nst-sandbox info <name>"
+        exit 1
+    fi
+
+    local resp
+    resp=$(api_call GET "/api/instances/$name") || { echo "❌ Instance '$name' not found or API unreachable."; exit 1; }
+
+    python3 -c "
+import json
+data = json.loads('''$resp''')
+inst = data.get('instance', {})
+print()
+print(f'  Instance:    {inst.get(\"id\", \"?\")}')
+print(f'  Image:       {inst.get(\"image_id\", \"?\")}')
+print(f'  Tier:        {inst.get(\"tier\", \"?\")}')
+print(f'  Storage:     {inst.get(\"storage\", \"?\")}')
+print(f'  Status:      {inst.get(\"status\", \"?\")}')
+print(f'  Created:     {inst.get(\"created_at\", \"?\")}')
+print(f'  Last access: {inst.get(\"last_accessed\", \"never\")}')
+if inst.get('ephemeral'):
+    print(f'  Expires:     {inst.get(\"expires_at\", \"?\")}')
+print(f'  URL:         http://{inst.get(\"id\", \"?\")}.nstsdc.org')
+print(f'  SSH:         nst-sandbox ssh {inst.get(\"id\", \"?\")}')
+print()
+" 2>/dev/null || echo "$resp"
+}
+
+cmd_destroy() {
+    local name="${1:-}"
+    if [[ -z "$name" ]]; then
+        echo "Usage: nst-sandbox destroy <name>"
+        exit 1
+    fi
+
+    local token
+    token=$(get_token "$name")
+
+    if [[ -z "$token" ]]; then
+        echo "❌ No token found for '$name'. You can only destroy instances you created."
+        exit 1
+    fi
+
+    read -rp "🗑️  Delete instance '$name'? This cannot be undone. [y/N]: " confirm
+    [[ "$confirm" != "y" && "$confirm" != "Y" ]] && { echo "Cancelled."; exit 0; }
+
+    local resp
+    resp=$(curl -sf -X DELETE "$API_URL/api/instances/$name" \
+        -H "Authorization: Bearer $token") || {
+        echo "❌ Failed to delete '$name'."
+        exit 1
+    }
+
+    remove_instance "$name"
+    echo "✅ Instance '$name' deleted."
+}
+
+cmd_help() {
+    cat << HELP
+nst-sandbox v$VERSION — NST Cloud Sandbox CLI
+
+Usage:
+  nst-sandbox create [name]       Create a new instance (interactive)
+  nst-sandbox create name --image ubuntu-22.04 --tier T2 --storage S3 --24h
+  nst-sandbox list                List your instances
+  nst-sandbox ssh <name>          SSH into an instance
+  nst-sandbox info <name>         Show instance details
+  nst-sandbox destroy <name>      Delete an instance
+  nst-sandbox images              Show available images and tiers
+  nst-sandbox help                Show this help
+
+Examples:
+  nst-sandbox create my-devbox
+  nst-sandbox ssh my-devbox
+  nst-sandbox destroy my-devbox
+
+Config: ~/.nst-sandbox/instances.json
+HELP
+}
+
+# ── Main ─────────────────────────────────────────────────
+
+CMD="${1:-help}"
+shift || true
+
+case "$CMD" in
+    create)   cmd_create "$@" ;;
+    list|ls)  cmd_list ;;
+    ssh)      cmd_ssh "$@" ;;
+    info)     cmd_info "$@" ;;
+    destroy|delete|rm) cmd_destroy "$@" ;;
+    images)   cmd_images ;;
+    help|--help|-h) cmd_help ;;
+    *)        echo "Unknown command: $CMD"; cmd_help; exit 1 ;;
+esac

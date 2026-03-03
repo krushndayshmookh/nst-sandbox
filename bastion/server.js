@@ -1,3 +1,15 @@
+const http = require('http');
+
+// Fire-and-forget: notify API of SSH access for last_accessed tracking
+function notifyAccess(name) {
+  try {
+    const apiUrl = process.env.API_URL || 'http://sandbox-api.nst-sandbox-api.svc.cluster.local:3000';
+    const req = http.request(apiUrl + '/api/instances/' + name + '/accessed', { method: 'POST', timeout: 3000 });
+    req.on('error', () => {});
+    req.end();
+  } catch {}
+}
+
 const ssh2 = require('ssh2');
 const { execSync } = require('child_process');
 const fs = require('fs');
@@ -63,6 +75,7 @@ const server = new ssh2.Server({ hostKeys: [hostKey] }, (client) => {
       upstreamConn = new ssh2.Client();
 
       upstreamConn.on('ready', () => {
+        notifyAccess(username);
         console.log(`[${ts()}] Auth OK: ${username} → ${upstream.host}:${upstream.port}`);
         ctx.accept();
       });

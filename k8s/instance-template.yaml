@@ -1,10 +1,41 @@
+# k8s/instance-template.yaml
+# Per-instance Kubernetes manifest template for NST Sandbox v2.
+# Placeholders replaced by api/k8s.js before kubectl apply:
+#   __STUDENT_ID__  — instance name (used as username + namespace suffix)
+#   __IMAGE__       — Docker image to run (from image catalog)
+#   __IMAGE_ID__    — image catalog id (label only)
+#   __TIER__        — compute tier label (T1/T2/T3)
+#   __PASSWORD__    — student SSH password
+#   __SSH_PORT__    — NodePort for SSH (30100-31000)
+#   __CPU_REQ__     — CPU request (e.g. 100m)
+#   __CPU_LIM__     — CPU limit (e.g. 500m)
+#   __MEM_REQ__     — Memory request (e.g. 128Mi)
+#   __MEM_LIM__     — Memory limit (e.g. 512Mi)
+#   __STORAGE__     — PVC size (e.g. 1Gi)
+
 apiVersion: v1
 kind: Namespace
 metadata:
   name: sandbox-__STUDENT_ID__
   labels:
     app: nst-sandbox
-    student: "__STUDENT_ID__"
+    instance: "__STUDENT_ID__"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: student-pvc
+  namespace: sandbox-__STUDENT_ID__
+  labels:
+    app: nst-sandbox
+    instance: "__STUDENT_ID__"
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: __STORAGE__
+  storageClassName: local-path
 ---
 apiVersion: v1
 kind: Pod
@@ -13,11 +44,14 @@ metadata:
   namespace: sandbox-__STUDENT_ID__
   labels:
     app: nst-sandbox
-    student: "__STUDENT_ID__"
+    instance: "__STUDENT_ID__"
+    image: "__IMAGE_ID__"
+    tier: "__TIER__"
 spec:
   containers:
   - name: sandbox
     image: __IMAGE__
+    imagePullPolicy: Always
     env:
     - name: STUDENT_USER
       value: "__STUDENT_ID__"
@@ -30,11 +64,11 @@ spec:
       name: http
     resources:
       requests:
-        memory: "32Mi"
-        cpu: "25m"
+        cpu: "__CPU_REQ__"
+        memory: "__MEM_REQ__"
       limits:
-        memory: "128Mi"
-        cpu: "200m"
+        cpu: "__CPU_LIM__"
+        memory: "__MEM_LIM__"
     volumeMounts:
     - name: student-data
       mountPath: /home/__STUDENT_ID__
@@ -48,28 +82,18 @@ spec:
       claimName: student-pvc
 ---
 apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: student-pvc
-  namespace: sandbox-__STUDENT_ID__
-spec:
-  accessModes:
-  - ReadWriteOnce
-  resources:
-    requests:
-      storage: 512Mi
-  storageClassName: local-path
----
-apiVersion: v1
 kind: Service
 metadata:
   name: sandbox-ssh
   namespace: sandbox-__STUDENT_ID__
+  labels:
+    app: nst-sandbox
+    instance: "__STUDENT_ID__"
 spec:
   type: NodePort
   selector:
     app: nst-sandbox
-    student: "__STUDENT_ID__"
+    instance: "__STUDENT_ID__"
   ports:
   - port: 22
     targetPort: 22
@@ -81,11 +105,14 @@ kind: Service
 metadata:
   name: sandbox-http
   namespace: sandbox-__STUDENT_ID__
+  labels:
+    app: nst-sandbox
+    instance: "__STUDENT_ID__"
 spec:
   type: ClusterIP
   selector:
     app: nst-sandbox
-    student: "__STUDENT_ID__"
+    instance: "__STUDENT_ID__"
   ports:
   - port: 80
     targetPort: 80

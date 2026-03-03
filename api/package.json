@@ -1,0 +1,13 @@
+{
+  "name": "nst-sandbox-api",
+  "version": "2.0.0",
+  "private": true,
+  "description": "NST Sandbox v2 API server — multi-image container provisioning for students",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^9.4.3"
+  }
+}

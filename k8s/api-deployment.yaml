@@ -1,3 +1,7 @@
+# k8s/api-deployment.yaml
+# Kubernetes deployment for the NST Sandbox v2 API server.
+# Includes: RBAC for provisioning, SQLite PVC, ingress for sandbox.nstsdc.org.
+
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -34,17 +38,18 @@ roleRef:
   name: sandbox-provisioner
   apiGroup: rbac.authorization.k8s.io
 ---
+# SQLite database + static assets storage (512Mi — plenty for sqlite + logs)
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: sandbox-tokens
+  name: sandbox-data
   namespace: nst-sandbox-api
 spec:
   accessModes:
   - ReadWriteOnce
   resources:
     requests:
-      storage: 64Mi
+      storage: 512Mi
   storageClassName: local-path
 ---
 apiVersion: apps/v1
@@ -65,32 +70,34 @@ spec:
       serviceAccountName: sandbox-provisioner
       containers:
       - name: api
-        image: registry.nstsdc.org:5000/nst-sandbox-api:latest
+        image: localhost:30500/nst-sandbox-api:latest
         imagePullPolicy: Always
-        command: ["node", "/opt/nst-sandbox/server.js"]
         ports:
         - containerPort: 3000
         env:
         - name: PORT
           value: "3000"
-        - name: SANDBOX_CLI
-          value: "/usr/local/bin/nst-sandbox"
+        - name: DB_PATH
+          value: "/data/sandbox.db"
         - name: ADMIN_KEY
           value: "nst-admin-2026"
+        # GIT_COMMIT is injected at deploy time (e.g. via CI or build script)
+        - name: GIT_COMMIT
+          value: "dev"
         volumeMounts:
-        - name: tokens
-          mountPath: /data/tokens
+        - name: data
+          mountPath: /data
         resources:
           requests:
-            memory: "64Mi"
-            cpu: "50m"
+            memory: "128Mi"
+            cpu: "100m"
           limits:
-            memory: "256Mi"
+            memory: "512Mi"
             cpu: "500m"
       volumes:
-      - name: tokens
+      - name: data
         persistentVolumeClaim:
-          claimName: sandbox-tokens
+          claimName: sandbox-data
 ---
 apiVersion: v1
 kind: Service

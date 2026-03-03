@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NST Sandbox</title>
+</head>
+<body>
+    <header>
+        <h1>NST Sandbox</h1>
+        <p>Your personal Linux server on the NST cluster.</p>
+    </header>
+
+    <main>
+        <section>
+            <h2>Install</h2>
+            <pre><code>curl -sL https://sandbox.nstsdc.org/install | bash</code></pre>
+        </section>
+
+        <section>
+            <h2>Quick Start</h2>
+            <ol>
+                <li>
+                    <strong>Create an instance:</strong>
+                    <pre><code>nst-sandbox create my-devbox</code></pre>
+                    <p>You'll pick an image, compute tier, and storage interactively.</p>
+                </li>
+                <li>
+                    <strong>SSH in:</strong>
+                    <pre><code>nst-sandbox ssh my-devbox</code></pre>
+                </li>
+                <li>
+                    <strong>Your site is live at:</strong>
+                    <pre><code>http://my-devbox.nstsdc.org</code></pre>
+                </li>
+            </ol>
+        </section>
+
+        <section>
+            <h2>CLI Commands</h2>
+            <table>
+                <thead>
+                    <tr><th>Command</th><th>Description</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td><code>nst-sandbox create [name]</code></td><td>Create a new instance</td></tr>
+                    <tr><td><code>nst-sandbox list</code></td><td>List your instances</td></tr>
+                    <tr><td><code>nst-sandbox ssh &lt;name&gt;</code></td><td>SSH into an instance</td></tr>
+                    <tr><td><code>nst-sandbox info &lt;name&gt;</code></td><td>Show instance details</td></tr>
+                    <tr><td><code>nst-sandbox destroy &lt;name&gt;</code></td><td>Delete an instance</td></tr>
+                    <tr><td><code>nst-sandbox images</code></td><td>Show available images and tiers</td></tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section>
+            <h2>Available Images</h2>
+            <dl>
+                <dt><strong>ubuntu-22.04</strong></dt>
+                <dd>Ubuntu 22.04 LTS — minimal server with SSH and sudo. Install anything with <code>apt</code>.</dd>
+
+                <dt><strong>alpine-web</strong></dt>
+                <dd>Alpine Linux with nginx, Node.js, and git. Great for web projects.</dd>
+            </dl>
+        </section>
+
+        <section>
+            <h2>Compute Tiers</h2>
+            <table>
+                <thead>
+                    <tr><th>Tier</th><th>vCPU</th><th>RAM</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>T1</td><td>0.5</td><td>512MB</td></tr>
+                    <tr><td>T2</td><td>1</td><td>1GB</td></tr>
+                    <tr><td>T3</td><td>2</td><td>2GB</td></tr>
+                </tbody>
+            </table>
+        </section>
+    </main>
+
+    <footer>
+        <p>
+            <a href="https://github.com/nst-sdc/nst-sandbox">GitHub</a> ·
+            <a href="https://nstsdc.org">NST SDC</a> ·
+            Version: <code>__GIT_COMMIT__</code>
+        </p>
+    </footer>
+</body>
+</html>

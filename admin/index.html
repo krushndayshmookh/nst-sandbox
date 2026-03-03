@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NST Sandbox — Admin</title>
+</head>
+<body>
+    <div id="app">
+        <!-- Auth prompt -->
+        <template v-if="!authenticated">
+            <h1>NST Sandbox Admin</h1>
+            <form @submit.prevent="login">
+                <label>Admin Key: <input type="password" v-model="adminKey" autofocus></label>
+                <button type="submit">Login</button>
+                <p v-if="authError" style="color:red">{{ authError }}</p>
+            </form>
+        </template>
+
+        <!-- Main app -->
+        <template v-else>
+            <header>
+                <h1>NST Sandbox Admin</h1>
+                <nav>
+                    <button @click="view='dashboard'" :disabled="view==='dashboard'">Dashboard</button>
+                    <button @click="view='instances'" :disabled="view==='instances'">Instances</button>
+                    <button @click="view='images'" :disabled="view==='images'">Images</button>
+                    <button @click="view='config'" :disabled="view==='config'">Config</button>
+                    <button @click="logout" style="float:right">Logout</button>
+                </nav>
+            </header>
+
+            <main>
+                <!-- Dashboard -->
+                <section v-if="view==='dashboard'">
+                    <h2>Dashboard</h2>
+                    <p>Total active instances: <strong>{{ stats.total || 0 }}</strong></p>
+
+                    <details open>
+                        <summary>By Image</summary>
+                        <table>
+                            <tr v-for="s in stats.byImage || []"><td>{{ s.image_id }}</td><td>{{ s.n }}</td></tr>
+                        </table>
+                    </details>
+
+                    <details open>
+                        <summary>By Tier</summary>
+                        <table>
+                            <tr v-for="s in stats.byTier || []"><td>{{ s.tier }}</td><td>{{ s.n }}</td></tr>
+                        </table>
+                    </details>
+
+                    <details open>
+                        <summary>By Status</summary>
+                        <table>
+                            <tr v-for="s in stats.byStatus || []"><td>{{ s.status }}</td><td>{{ s.n }}</td></tr>
+                        </table>
+                    </details>
+                </section>
+
+                <!-- Instances -->
+                <section v-if="view==='instances'">
+                    <h2>Instances</h2>
+
+                    <div>
+                        <label>Filter: <input v-model="filter" placeholder="name, image, status..."></label>
+                        <button @click="fetchInstances">Refresh</button>
+                        <button @click="bulkDelete" v-if="selected.length">Delete Selected ({{ selected.length }})</button>
+                        <button @click="deleteAll" style="color:red">Delete All</button>
+                        <button @click="purge">Purge Inactive</button>
+                    </div>
+
+                    <table>
+                        <thead>
+                            <tr>
+                                <th><input type="checkbox" @change="toggleAll" :checked="allSelected"></th>
+                                <th>Name</th>
+                                <th>Image</th>
+                                <th>Tier</th>
+                                <th>Storage</th>
+                                <th>Status</th>
+                                <th>Created</th>
+                                <th>Last Accessed</th>
+                                <th>Ephemeral</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="inst in filteredInstances" :key="inst.id">
+                                <td><input type="checkbox" :value="inst.id" v-model="selected"></td>
+                                <td>{{ inst.id }}</td>
+                                <td>{{ inst.image_id }}</td>
+                                <td>{{ inst.tier }}</td>
+                                <td>{{ inst.storage }}</td>
+                                <td>{{ inst.status }}</td>
+                                <td>{{ inst.created_at }}</td>
+                                <td>{{ inst.last_accessed || 'never' }}</td>
+                                <td>{{ inst.ephemeral ? 'Yes (' + inst.expires_at + ')' : 'No' }}</td>
+                                <td>
+                                    <button @click="deleteInstance(inst.id)" title="Delete">🗑️</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <p v-if="!filteredInstances.length"><em>No instances{{ filter ? ' matching filter' : '' }}.</em></p>
+                </section>
+
+                <!-- Images -->
+                <section v-if="view==='images'">
+                    <h2>Image Catalog</h2>
+                    <button @click="fetchImages">Refresh</button>
+
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th>Docker Image</th>
+                                <th>Ports</th>
+                                <th>Default Tier</th>
+                                <th>Enabled</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="img in images" :key="img.id">
+                                <td>{{ img.id }}</td>
+                                <td>{{ img.name }}</td>
+                                <td><code>{{ img.docker_image }}</code></td>
+                                <td>{{ img.ports }}</td>
+                                <td>{{ img.default_tier }}</td>
+                                <td>{{ img.enabled ? 'Yes' : 'No' }}</td>
+                                <td>
+                                    <button @click="toggleImage(img)">{{ img.enabled ? 'Disable' : 'Enable' }}</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <details>
+                        <summary>Add Image</summary>
+                        <form @submit.prevent="addImage">
+                            <p><label>ID: <input v-model="newImage.id" required placeholder="e.g. debian-12"></label></p>
+                            <p><label>Name: <input v-model="newImage.name" required placeholder="Debian 12"></label></p>
+                            <p><label>Description: <input v-model="newImage.description" placeholder="Minimal Debian..."></label></p>
+                            <p><label>Docker Image: <input v-model="newImage.docker_image" required placeholder="localhost:30500/..."></label></p>
+                            <p><label>Ports (JSON): <input v-model="newImage.ports" placeholder="[22, 80]"></label></p>
+                            <p><label>Default Tier: <input v-model="newImage.default_tier" placeholder="T1"></label></p>
+                            <p><button type="submit">Add</button></p>
+                        </form>
+                    </details>
+                </section>
+
+                <!-- Config -->
+                <section v-if="view==='config'">
+                    <h2>Configuration</h2>
+                    <button @click="fetchConfig">Refresh</button>
+
+                    <form @submit.prevent="saveConfig">
+                        <table>
+                            <thead><tr><th>Key</th><th>Value</th></tr></thead>
+                            <tbody>
+                                <tr v-for="c in config" :key="c.key">
+                                    <td><code>{{ c.key }}</code></td>
+                                    <td><input v-model="c.value"></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <p><button type="submit">Save</button></p>
+                    </form>
+                </section>
+            </main>
+        </template>
+    </div>
+
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script>
+    const { createApp, ref, computed, onMounted } = Vue;
+
+    createApp({
+        setup() {
+            const adminKey = ref(sessionStorage.getItem('adminKey') || '');
+            const authenticated = ref(false);
+            const authError = ref('');
+            const view = ref('dashboard');
+            const stats = ref({});
+            const instances = ref([]);
+            const images = ref([]);
+            const config = ref([]);
+            const filter = ref('');
+            const selected = ref([]);
+            const newImage = ref({ id: '', name: '', description: '', docker_image: '', ports: '[22]', default_tier: 'T1' });
+
+            const headers = () => ({ 'X-Admin-Key': adminKey.value, 'Content-Type': 'application/json' });
+
+            async function api(method, path, body) {
+                const opts = { method, headers: headers() };
+                if (body) opts.body = JSON.stringify(body);
+                const resp = await fetch(path, opts);
+                return resp.json();
+            }
+
+            async function login() {
+                try {
+                    const data = await api('GET', '/admin/api/stats');
+                    if (data.ok) {
+                        authenticated.value = true;
+                        sessionStorage.setItem('adminKey', adminKey.value);
+                        stats.value = data.stats;
+                        fetchInstances();
+                        fetchImages();
+                        fetchConfig();
+                    } else {
+                        authError.value = data.error || 'Invalid key';
+                    }
+                } catch {
+                    authError.value = 'Cannot reach API';
+                }
+            }
+
+            function logout() {
+                authenticated.value = false;
+                sessionStorage.removeItem('adminKey');
+                adminKey.value = '';
+            }
+
+            async function fetchStats() { const d = await api('GET', '/admin/api/stats'); if (d.ok) stats.value = d.stats; }
+            async function fetchInstances() { const d = await api('GET', '/admin/api/instances'); if (d.ok) instances.value = d.instances; selected.value = []; }
+            async function fetchImages() { const d = await api('GET', '/admin/api/images'); if (d.ok) images.value = d.images; }
+            async function fetchConfig() { const d = await api('GET', '/admin/api/config'); if (d.ok) config.value = d.config; }
+
+            async function deleteInstance(name) {
+                if (!confirm(`Delete instance "${name}"?`)) return;
+                await api('DELETE', `/admin/api/instances/${name}`);
+                fetchInstances();
+                fetchStats();
+            }
+
+            async function bulkDelete() {
+                if (!confirm(`Delete ${selected.value.length} instances?`)) return;
+                await api('DELETE', '/admin/api/instances', { names: selected.value });
+                fetchInstances();
+                fetchStats();
+            }
+
+            async function deleteAll() {
+                if (!confirm('DELETE ALL INSTANCES? This cannot be undone.')) return;
+                if (!confirm('Are you really sure?')) return;
+                await api('DELETE', '/admin/api/instances', { filter: 'all' });
+                fetchInstances();
+                fetchStats();
+            }
+
+            async function purge() {
+                const days = prompt('Purge instances inactive for how many days?', '30');
+                if (!days) return;
+                const d = await api('POST', '/admin/api/purge', { days: parseInt(days) });
+                alert(`Purged ${d.purged || 0} instances.`);
+                fetchInstances();
+                fetchStats();
+            }
+
+            async function addImage() {
+                const d = await api('POST', '/admin/api/images', newImage.value);
+                if (d.ok) {
+                    newImage.value = { id: '', name: '', description: '', docker_image: '', ports: '[22]', default_tier: 'T1' };
+                    fetchImages();
+                } else {
+                    alert(d.error || 'Failed');
+                }
+            }
+
+            async function toggleImage(img) {
+                await api('PUT', `/admin/api/images/${img.id}`, { enabled: img.enabled ? 0 : 1 });
+                fetchImages();
+            }
+
+            async function saveConfig() {
+                const pairs = {};
+                config.value.forEach(c => { pairs[c.key] = c.value; });
+                await api('PUT', '/admin/api/config', pairs);
+                alert('Saved.');
+                fetchConfig();
+            }
+
+            const filteredInstances = computed(() => {
+                if (!filter.value) return instances.value;
+                const q = filter.value.toLowerCase();
+                return instances.value.filter(i =>
+                    i.id.includes(q) || (i.image_id || '').includes(q) ||
+                    (i.tier || '').toLowerCase().includes(q) || (i.status || '').includes(q)
+                );
+            });
+
+            const allSelected = computed(() =>
+                filteredInstances.value.length > 0 && selected.value.length === filteredInstances.value.length
+            );
+
+            function toggleAll(e) {
+                selected.value = e.target.checked ? filteredInstances.value.map(i => i.id) : [];
+            }
+
+            // Auto-login if key in session
+            onMounted(() => {
+                if (adminKey.value) login();
+            });
+
+            return {
+                adminKey, authenticated, authError, view,
+                stats, instances, images, config, filter, selected, newImage,
+                login, logout, fetchInstances, fetchImages, fetchConfig, fetchStats,
+                deleteInstance, bulkDelete, deleteAll, purge,
+                addImage, toggleImage, saveConfig,
+                filteredInstances, allSelected, toggleAll,
+            };
+        }
+    }).mount('#app');
+    </script>
+</body>
+</html>
