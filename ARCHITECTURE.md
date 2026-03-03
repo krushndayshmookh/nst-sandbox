@@ -362,3 +362,19 @@ nst-sandbox/
 - GPU-attached instances
 - Cost tracking / credit system
 - Instance templates (save a configured instance as a new image)
+
+### 15. Student Landing Page (`sandbox.nstsdc.org/`)
+
+Static HTML page served by the API at `/`. Minimal, no frameworks.
+
+**Content:**
+- NST Sandbox branding (text only, no images)
+- One-liner install command: `curl -sL https://sandbox.nstsdc.org/install | bash`
+- Quick usage examples
+- Link to GitHub repo (`github.com/nst-sdc/nst-sandbox`)
+- Version displayed as short git commit hash (injected at build time via env var `GIT_COMMIT`)
+
+**Implementation:**
+- Single `public/index.html` file served by the API
+- API reads `GIT_COMMIT` env var (set in K8s deployment from CI or build script)
+- Fallback: `dev` if env var not set
