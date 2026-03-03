@@ -4,6 +4,170 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NST Sandbox</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: "Inter", "SF Pro Text", -apple-system, system-ui, sans-serif;
+            color: #1a1a1a;
+            background: #fafafa;
+            line-height: 1.6;
+        }
+
+        header, main, footer {
+            max-width: 680px;
+            margin: 0 auto;
+            padding: 0 24px;
+        }
+
+        header {
+            padding-top: 80px;
+            padding-bottom: 48px;
+        }
+
+        header h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            margin-bottom: 8px;
+        }
+
+        header p {
+            color: #555;
+            font-size: 1.1rem;
+        }
+
+        section {
+            margin-bottom: 48px;
+        }
+
+        h2 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #333;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        pre {
+            background: #1a1a1a;
+            color: #e0e0e0;
+            padding: 16px 20px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 0.9rem;
+            font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+        }
+
+        section > pre {
+            margin-bottom: 12px;
+        }
+
+        code {
+            font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+            font-size: 0.88em;
+        }
+
+        p code, td code, dd code, li code {
+            background: #eee;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+
+        ol {
+            list-style: none;
+            counter-reset: steps;
+            padding: 0;
+        }
+
+        ol li {
+            counter-increment: steps;
+            margin-bottom: 24px;
+        }
+
+        ol li strong {
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        ol li strong::before {
+            content: counter(steps) ". ";
+            color: #999;
+        }
+
+        ol li p {
+            color: #555;
+            font-size: 0.95rem;
+            margin-top: 8px;
+        }
+
+        ol li pre {
+            margin-top: 8px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 10px 12px;
+            border-bottom: 1px solid #e8e8e8;
+        }
+
+        th {
+            font-weight: 600;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            color: #777;
+        }
+
+        td {
+            font-size: 0.95rem;
+        }
+
+        dl {
+            display: grid;
+            gap: 16px;
+        }
+
+        dt {
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        dd {
+            color: #555;
+            font-size: 0.95rem;
+            margin-left: 0;
+        }
+
+        footer {
+            padding: 48px 24px 64px;
+            color: #999;
+            font-size: 0.85rem;
+        }
+
+        footer a {
+            color: #555;
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            color: #1a1a1a;
+        }
+
+        @media (max-width: 600px) {
+            header { padding-top: 48px; padding-bottom: 32px; }
+            header h1 { font-size: 1.6rem; }
+            section { margin-bottom: 36px; }
+        }
+    </style>
 </head>
 <body>
     <header>
@@ -21,16 +185,16 @@
             <h2>Quick Start</h2>
             <ol>
                 <li>
-                    <strong>Create an instance:</strong>
+                    <strong>Create an instance</strong>
                     <pre><code>nst-sandbox create my-devbox</code></pre>
-                    <p>You'll pick an image, compute tier, and storage interactively.</p>
+                    <p>Pick an image, compute tier, and storage interactively.</p>
                 </li>
                 <li>
-                    <strong>SSH in:</strong>
+                    <strong>SSH in</strong>
                     <pre><code>nst-sandbox ssh my-devbox</code></pre>
                 </li>
                 <li>
-                    <strong>Your site is live at:</strong>
+                    <strong>Your site is live at</strong>
                     <pre><code>http://my-devbox.nstsdc.org</code></pre>
                 </li>
             </ol>
@@ -56,10 +220,10 @@
         <section>
             <h2>Available Images</h2>
             <dl>
-                <dt><strong>ubuntu-22.04</strong></dt>
-                <dd>Ubuntu 22.04 LTS — minimal server with SSH and sudo. Install anything with <code>apt</code>.</dd>
+                <dt>ubuntu-22.04</dt>
+                <dd>Ubuntu 22.04 LTS -- minimal server with SSH and sudo. Install anything with <code>apt</code>.</dd>
 
-                <dt><strong>alpine-web</strong></dt>
+                <dt>alpine-web</dt>
                 <dd>Alpine Linux with nginx, Node.js, and git. Great for web projects.</dd>
             </dl>
         </section>
