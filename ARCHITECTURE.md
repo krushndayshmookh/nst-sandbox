@@ -208,6 +208,7 @@ Plain HTML + Vue.js. No CSS frameworks. Semantic HTML only.
 #### Image: `ubuntu-22.04` (the EC2 sim)
 
 Based on the `ec2-sim` Dockerfile we built today. Ubuntu 22.04 minimal with:
+
 - openssh-server, sudo, curl, wget, vim-tiny, nano, git, net-tools
 - EC2-style MOTD and prompt
 - `--no-install-recommends` to keep it slim (~158MB)
@@ -368,6 +369,7 @@ nst-sandbox/
 Static HTML page served by the API at `/`. Minimal, no frameworks.
 
 **Content:**
+
 - NST Sandbox branding (text only, no images)
 - One-liner install command: `curl -sL https://sandbox.nstsdc.org/install | bash`
 - Quick usage examples
@@ -375,6 +377,7 @@ Static HTML page served by the API at `/`. Minimal, no frameworks.
 - Version displayed as short git commit hash (injected at build time via env var `GIT_COMMIT`)
 
 **Implementation:**
+
 - Single `public/index.html` file served by the API
 - API reads `GIT_COMMIT` env var (set in K8s deployment from CI or build script)
 - Fallback: `dev` if env var not set
