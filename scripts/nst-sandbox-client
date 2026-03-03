@@ -1,0 +1,213 @@
+#!/bin/bash
+# nst-sandbox — Student sandbox CLI for the NST cluster
+# Install: curl -sL https://sandbox.nstsdc.org/install | bash
+# Usage:   nst-sandbox <roll-number>
+#          nst-sandbox --remove
+#          nst-sandbox --info
+#          nst-sandbox --help
+
+set -euo pipefail
+
+API_URL="${NST_SANDBOX_API:-https://sandbox.nstsdc.org}"
+CONFIG_DIR="$HOME/.nst-sandbox"
+CONFIG_FILE="$CONFIG_DIR/config.json"
+
+# ── Helpers ──────────────────────────────────────────────
+
+ensure_config_dir() {
+    mkdir -p "$CONFIG_DIR"
+}
+
+save_config() {
+    local id="$1" token="$2" ssh_cmd="$3" password="$4" web="$5"
+    ensure_config_dir
+    cat > "$CONFIG_FILE" << EOF
+{
+  "id": "$id",
+  "token": "$token",
+  "ssh": "$ssh_cmd",
+  "password": "$password",
+  "web": "$web"
+}
+EOF
+    chmod 600 "$CONFIG_FILE"
+}
+
+load_config() {
+    if [[ -f "$CONFIG_FILE" ]]; then
+        cat "$CONFIG_FILE"
+    else
+        echo ""
+    fi
+}
+
+get_field() {
+    local field="$1"
+    local config
+    config=$(load_config)
+    [[ -z "$config" ]] && return 1
+    echo "$config" | grep -o "\"$field\": *\"[^\"]*\"" | head -1 | sed 's/.*: *"//;s/"$//'
+}
+
+print_credentials() {
+    local id ssh_cmd password web
+    id=$(get_field "id") || true
+    ssh_cmd=$(get_field "ssh") || true
+    password=$(get_field "password") || true
+    web=$(get_field "web") || true
+
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "  🎓 NST Sandbox: $id"
+    echo ""
+    echo "  🔑 SSH:      nst-ssh $id"
+    echo "  🔒 Password: $password"
+    echo "  🌐 Website:  $web"
+    echo ""
+    echo "  Connect:     nst-ssh $id"
+    echo "  Then edit:   nano ~/public/index.html"
+    echo ""
+    echo "  Full SSH:    ssh -o ProxyCommand=\"cloudflared access ssh --hostname sandbox-ssh.nstsdc.org\" $id@sandbox-ssh.nstsdc.org"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+}
+
+# ── Commands ─────────────────────────────────────────────
+
+cmd_create() {
+    local student_id="$1"
+
+    # Sanitize
+    student_id=$(echo "$student_id" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9-')
+
+    if [[ ${#student_id} -lt 3 ]]; then
+        echo "❌ ID must be at least 3 characters (lowercase letters, numbers, hyphens)"
+        exit 1
+    fi
+
+    # Check if we already have a config
+    local existing_id
+    existing_id=$(get_field "id" 2>/dev/null) || true
+    if [[ -n "$existing_id" && "$existing_id" != "$student_id" ]]; then
+        echo "⚠️  You already have a sandbox: $existing_id"
+        echo "   Run 'nst-sandbox --remove' first to delete it."
+        exit 1
+    fi
+
+    echo "⏳ Setting up your sandbox..."
+
+    local response http_code body
+    response=$(curl -s -w "\n%{http_code}" -X POST "$API_URL/create" \
+        -H "Content-Type: application/json" \
+        -d "{\"id\":\"$student_id\"}")
+
+    http_code=$(echo "$response" | tail -1)
+    body=$(echo "$response" | sed '$d')
+
+    if [[ "$http_code" == "201" || "$http_code" == "200" ]]; then
+        local ssh_cmd password web token
+        ssh_cmd=$(echo "$body" | grep -o '"ssh":"[^"]*"' | cut -d'"' -f4)
+        password=$(echo "$body" | grep -o '"password":"[^"]*"' | cut -d'"' -f4)
+        web=$(echo "$body" | grep -o '"web":"[^"]*"' | cut -d'"' -f4)
+        token=$(echo "$body" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+
+        save_config "$student_id" "$token" "$ssh_cmd" "$password" "$web"
+        print_credentials
+    else
+        local error
+        error=$(echo "$body" | grep -o '"error":"[^"]*"' | cut -d'"' -f4)
+        echo "❌ ${error:-Failed (HTTP $http_code)}"
+        exit 1
+    fi
+}
+
+cmd_remove() {
+    local id token
+    id=$(get_field "id" 2>/dev/null) || true
+    token=$(get_field "token" 2>/dev/null) || true
+
+    if [[ -z "$id" ]]; then
+        echo "❌ No sandbox configured. Nothing to remove."
+        exit 1
+    fi
+
+    echo "🗑️  Removing sandbox: $id"
+
+    local response http_code body
+    response=$(curl -s -w "\n%{http_code}" -X DELETE "$API_URL/sandbox/$id" \
+        -H "Authorization: Bearer $token")
+
+    http_code=$(echo "$response" | tail -1)
+    body=$(echo "$response" | sed '$d')
+
+    if [[ "$http_code" == "200" ]]; then
+        rm -f "$CONFIG_FILE"
+        echo "✅ Sandbox '$id' deleted. Config cleared."
+    else
+        local error
+        error=$(echo "$body" | grep -o '"error":"[^"]*"' | cut -d'"' -f4)
+        echo "❌ ${error:-Failed (HTTP $http_code)}"
+        exit 1
+    fi
+}
+
+cmd_info() {
+    local id
+    id=$(get_field "id" 2>/dev/null) || true
+
+    if [[ -z "$id" ]]; then
+        echo "❌ No sandbox configured. Run: nst-sandbox <your-roll-number>"
+        exit 1
+    fi
+
+    print_credentials
+
+    echo "📊 Live status:"
+    curl -s "$API_URL/info/$id" | grep -o '"output":"[^"]*"' | cut -d'"' -f4 | sed 's/\\n/\n/g' || echo "   Could not fetch status."
+}
+
+cmd_ssh() {
+    local id password
+    id=$(get_field "id" 2>/dev/null) || true
+    password=$(get_field "password" 2>/dev/null) || true
+
+    if [[ -z "$id" ]]; then
+        echo "❌ No sandbox configured. Run: nst-sandbox <your-roll-number>"
+        exit 1
+    fi
+
+    if ! command -v cloudflared &>/dev/null; then
+        echo "❌ cloudflared is not installed. Run: curl -sL https://sandbox.nstsdc.org/install | bash"
+        exit 1
+    fi
+
+    echo "🔌 Connecting to $id... (password: $password)"
+    exec ssh -o ProxyCommand="cloudflared access ssh --hostname sandbox-ssh.nstsdc.org" "$id@sandbox-ssh.nstsdc.org"
+}
+
+cmd_help() {
+    echo "nst-sandbox — Your personal server on the NST cluster"
+    echo ""
+    echo "Usage:"
+    echo "  nst-sandbox <roll-number>    Create your sandbox (or show existing)"
+    echo "  nst-sandbox --info           Show your credentials and status"
+    echo "  nst-sandbox --ssh            SSH into your sandbox"
+    echo "  nst-sandbox --remove         Delete your sandbox"
+    echo "  nst-sandbox --help           Show this help"
+    echo ""
+    echo "First time?"
+    echo "  nst-sandbox 2024001"
+    echo ""
+    echo "Your credentials are saved in ~/.nst-sandbox/config.json"
+}
+
+# ── Main ─────────────────────────────────────────────────
+
+case "${1:---help}" in
+    --remove|--delete|-r)  cmd_remove ;;
+    --info|-i)             cmd_info ;;
+    --ssh|-s)              cmd_ssh ;;
+    --help|-h)             cmd_help ;;
+    -*)                    echo "Unknown flag: $1"; cmd_help; exit 1 ;;
+    *)                     cmd_create "$1" ;;
+esac

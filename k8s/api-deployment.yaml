@@ -1,0 +1,125 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nst-sandbox-api
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sandbox-provisioner
+  namespace: nst-sandbox-api
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sandbox-provisioner
+rules:
+- apiGroups: [""]
+  resources: ["namespaces", "pods", "services", "persistentvolumeclaims"]
+  verbs: ["*"]
+- apiGroups: ["networking.k8s.io"]
+  resources: ["ingresses"]
+  verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: sandbox-provisioner
+subjects:
+- kind: ServiceAccount
+  name: sandbox-provisioner
+  namespace: nst-sandbox-api
+roleRef:
+  kind: ClusterRole
+  name: sandbox-provisioner
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sandbox-tokens
+  namespace: nst-sandbox-api
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 64Mi
+  storageClassName: local-path
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sandbox-api
+  namespace: nst-sandbox-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sandbox-api
+  template:
+    metadata:
+      labels:
+        app: sandbox-api
+    spec:
+      serviceAccountName: sandbox-provisioner
+      containers:
+      - name: api
+        image: registry.nstsdc.org:5000/nst-sandbox-api:latest
+        imagePullPolicy: Always
+        command: ["node", "/opt/nst-sandbox/server.js"]
+        ports:
+        - containerPort: 3000
+        env:
+        - name: PORT
+          value: "3000"
+        - name: SANDBOX_CLI
+          value: "/usr/local/bin/nst-sandbox"
+        - name: ADMIN_KEY
+          value: "nst-admin-2026"
+        volumeMounts:
+        - name: tokens
+          mountPath: /data/tokens
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+      volumes:
+      - name: tokens
+        persistentVolumeClaim:
+          claimName: sandbox-tokens
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sandbox-api
+  namespace: nst-sandbox-api
+spec:
+  selector:
+    app: sandbox-api
+  ports:
+  - port: 3000
+    targetPort: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sandbox-api
+  namespace: nst-sandbox-api
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+spec:
+  rules:
+  - host: sandbox.nstsdc.org
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: sandbox-api
+            port:
+              number: 3000

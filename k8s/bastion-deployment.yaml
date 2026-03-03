@@ -1,0 +1,124 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sandbox-bastion
+  namespace: nst-sandbox-api
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sandbox-bastion
+rules:
+- apiGroups: [""]
+  resources: ["namespaces", "services"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: sandbox-bastion
+subjects:
+- kind: ServiceAccount
+  name: sandbox-bastion
+  namespace: nst-sandbox-api
+roleRef:
+  kind: ClusterRole
+  name: sandbox-bastion
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: bastion-hostkey
+  namespace: nst-sandbox-api
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 8Mi
+  storageClassName: local-path
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sandbox-bastion
+  namespace: nst-sandbox-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sandbox-bastion
+  template:
+    metadata:
+      labels:
+        app: sandbox-bastion
+    spec:
+      serviceAccountName: sandbox-bastion
+      containers:
+      - name: bastion
+        image: registry.nstsdc.org:5000/nst-sandbox-bastion:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 2222
+        env:
+        - name: SSH_PORT
+          value: "2222"
+        - name: HOST_KEY
+          value: "/data/hostkey/ssh_host_ed25519_key"
+        volumeMounts:
+        - name: hostkey
+          mountPath: /data/hostkey
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+      initContainers:
+      - name: keygen
+        image: registry.nstsdc.org:5000/nst-sandbox-bastion:latest
+        command: ["sh", "-c", "test -f /data/hostkey/ssh_host_ed25519_key || ssh-keygen -t ed25519 -f /data/hostkey/ssh_host_ed25519_key -N '' -q"]
+        volumeMounts:
+        - name: hostkey
+          mountPath: /data/hostkey
+      volumes:
+      - name: hostkey
+        persistentVolumeClaim:
+          claimName: bastion-hostkey
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sandbox-bastion
+  namespace: nst-sandbox-api
+spec:
+  type: NodePort
+  selector:
+    app: sandbox-bastion
+  ports:
+  - port: 2222
+    targetPort: 2222
+    nodePort: 30022
+    name: ssh
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sandbox-bastion-dummy
+  namespace: nst-sandbox-api
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+spec:
+  rules:
+  - host: sandbox-ssh.nstsdc.org
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: sandbox-api
+            port:
+              number: 3000

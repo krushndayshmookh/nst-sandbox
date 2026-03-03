@@ -1,0 +1,112 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sandbox-__STUDENT_ID__
+  labels:
+    app: nst-sandbox
+    student: "__STUDENT_ID__"
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: sandbox
+  namespace: sandbox-__STUDENT_ID__
+  labels:
+    app: nst-sandbox
+    student: "__STUDENT_ID__"
+spec:
+  containers:
+  - name: sandbox
+    image: __IMAGE__
+    env:
+    - name: STUDENT_USER
+      value: "__STUDENT_ID__"
+    - name: STUDENT_PASS
+      value: "__PASSWORD__"
+    ports:
+    - containerPort: 22
+      name: ssh
+    - containerPort: 80
+      name: http
+    resources:
+      requests:
+        memory: "32Mi"
+        cpu: "25m"
+      limits:
+        memory: "128Mi"
+        cpu: "200m"
+    volumeMounts:
+    - name: student-data
+      mountPath: /home/__STUDENT_ID__
+  securityContext:
+    sysctls:
+    - name: net.ipv4.ip_unprivileged_port_start
+      value: "0"
+  volumes:
+  - name: student-data
+    persistentVolumeClaim:
+      claimName: student-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: student-pvc
+  namespace: sandbox-__STUDENT_ID__
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 512Mi
+  storageClassName: local-path
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sandbox-ssh
+  namespace: sandbox-__STUDENT_ID__
+spec:
+  type: NodePort
+  selector:
+    app: nst-sandbox
+    student: "__STUDENT_ID__"
+  ports:
+  - port: 22
+    targetPort: 22
+    nodePort: __SSH_PORT__
+    name: ssh
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sandbox-http
+  namespace: sandbox-__STUDENT_ID__
+spec:
+  type: ClusterIP
+  selector:
+    app: nst-sandbox
+    student: "__STUDENT_ID__"
+  ports:
+  - port: 80
+    targetPort: 80
+    name: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sandbox-ingress
+  namespace: sandbox-__STUDENT_ID__
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+spec:
+  rules:
+  - host: __STUDENT_ID__.nstsdc.org
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: sandbox-http
+            port:
+              number: 80
