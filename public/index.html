@@ -77,6 +77,10 @@
             border-radius: 3px;
         }
 
+        code.dark {
+            background: transparent;
+        }
+
         ol {
             list-style: none;
             counter-reset: steps;
@@ -178,7 +182,7 @@
     <main>
         <section>
             <h2>Install</h2>
-            <pre><code>curl -sL https://sandbox.nstsdc.org/install | bash</code></pre>
+            <pre><code class="dark">curl -sL https://sandbox.nstsdc.org/install | bash</code></pre>
         </section>
 
         <section>
@@ -186,16 +190,16 @@
             <ol>
                 <li>
                     <strong>Create an instance</strong>
-                    <pre><code>nst-sandbox create my-devbox</code></pre>
+                    <pre><code class="dark">nst-sandbox create my-devbox</code></pre>
                     <p>Pick an image, compute tier, and storage interactively.</p>
                 </li>
                 <li>
                     <strong>SSH in</strong>
-                    <pre><code>nst-sandbox ssh my-devbox</code></pre>
+                    <pre><code class="dark">nst-sandbox ssh my-devbox</code></pre>
                 </li>
                 <li>
                     <strong>Your site is live at</strong>
-                    <pre><code>http://my-devbox.nstsdc.org</code></pre>
+                    <pre><code class="dark">http://my-devbox.nstsdc.org</code></pre>
                 </li>
             </ol>
         </section>
