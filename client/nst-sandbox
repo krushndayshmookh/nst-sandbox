@@ -350,6 +350,42 @@ print()
 " 2>/dev/null || echo "$resp"
 }
 
+
+cmd_restart() {
+    local name="${1:-}"
+    if [[ -z "$name" ]]; then
+        echo "Usage: nst-sandbox restart <name>"
+        exit 1
+    fi
+
+    local token
+    token=$(get_token "$name")
+
+    if [[ -z "$token" ]]; then
+        echo "❌ No token found for '$name'. You can only restart instances you created."
+        exit 1
+    fi
+
+    echo "🔄 Restarting $name..."
+
+    curl -sf -X POST "$API_URL/api/instances/$name/stop" \
+        -H "Authorization: Bearer $token" > /dev/null || {
+        echo "❌ Failed to stop '$name'."
+        exit 1
+    }
+
+    sleep 2
+
+    curl -sf -X POST "$API_URL/api/instances/$name/start" \
+        -H "Authorization: Bearer $token" > /dev/null || {
+        echo "❌ Failed to start '$name'."
+        exit 1
+    }
+
+    echo "✅ $name restarted. Give it a few seconds to come up."
+    echo "   SSH:  nst-sandbox ssh $name"
+}
+
 cmd_destroy() {
     local name="${1:-}"
     if [[ -z "$name" ]]; then
@@ -389,7 +425,8 @@ Usage:
   nst-sandbox list                List your instances
   nst-sandbox ssh <name>          SSH into an instance
   nst-sandbox info <name>         Show instance details
-  nst-sandbox destroy <name>      Delete an instance
+  nst-sandbox restart <name>         Restart an instance
+  nst-sandbox destroy <name>       Delete an instance
   nst-sandbox images              Show available images and tiers
   nst-sandbox help                Show this help
 
@@ -412,6 +449,7 @@ case "$CMD" in
     list|ls)  cmd_list ;;
     ssh)      cmd_ssh "$@" ;;
     info)     cmd_info "$@" ;;
+    restart) cmd_restart "$@" ;;
     destroy|delete|rm) cmd_destroy "$@" ;;
     images)   cmd_images ;;
     help|--help|-h) cmd_help ;;

@@ -45,7 +45,7 @@ RUN mkdir -p /home/${STUDENT_USER}/.ssh && \
 
 # EC2-like prompt
 RUN echo 'PS1="\[\e[32m\]\u@ip-172-31-42-\h\[\e[0m\]:\[\e[34m\]\w\[\e[0m\]\$ "' >> /home/${STUDENT_USER}/.bashrc && \
-    echo 'cat /etc/motd 2>/dev/null' >> /home/${STUDENT_USER}/.bashrc
+    
 
 EXPOSE 22
 COPY entrypoint.sh /entrypoint.sh
