@@ -93,9 +93,9 @@
                                 <td>{{ inst.tier }}</td>
                                 <td>{{ inst.storage }}</td>
                                 <td>{{ inst.status }}</td>
-                                <td>{{ inst.created_at }}</td>
-                                <td>{{ inst.last_accessed || 'never' }}</td>
-                                <td>{{ inst.ephemeral ? 'Yes (' + inst.expires_at + ')' : 'No' }}</td>
+                                <td>{{ toIST(inst.created_at) }}</td>
+                                <td>{{ inst.last_accessed ? toIST(inst.last_accessed) : 'never' }}</td>
+                                <td>{{ inst.ephemeral ? 'Yes (' + toIST(inst.expires_at) + ')' : 'No' }}</td>
                                 <td>
                                     <button @click="restartInstance(inst.id)" title="Restart" :disabled="inst._restarting">
                                         {{ inst._restarting ? 'Restarting...' : 'Restart' }}
@@ -325,6 +325,11 @@
                 filteredInstances.value.length > 0 && selected.value.length === filteredInstances.value.length
             );
 
+            function toIST(ts) {
+                if (!ts) return '-';
+                return new Date(ts).toLocaleString('en-IN', { timeZone: 'Asia/Calcutta', year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+            }
+
             function toggleAll(e) {
                 selected.value = e.target.checked ? filteredInstances.value.map(i => i.id) : [];
             }
@@ -340,7 +345,7 @@
                 restartInstance, stopInstance, startInstance,
                 deleteInstance, bulkDelete, deleteAll, purge,
                 addImage, toggleImage, saveConfig,
-                filteredInstances, allSelected, toggleAll,
+                filteredInstances, allSelected, toggleAll, toIST,
             };
         }
     }).mount('#app');
