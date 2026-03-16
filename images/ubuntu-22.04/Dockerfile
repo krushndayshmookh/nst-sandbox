@@ -36,7 +36,7 @@ RUN mkdir -p /home/${STUDENT_USER}/.ssh && \
     chmod 700 /home/${STUDENT_USER}/.ssh
 
 # MOTD (static base — dynamic content added at container start by entrypoint)
-COPY motd /etc/motd
+COPY motd /usr/share/nst-motd-base
 RUN chmod -x /etc/update-motd.d/* 2>/dev/null || true
 
 EXPOSE 22 80

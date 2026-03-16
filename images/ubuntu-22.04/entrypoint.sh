@@ -25,6 +25,13 @@ fi
 sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config 2>/dev/null || true
 sed -i 's/#PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config 2>/dev/null || true
 
+# Disable PAM-based motd printing (prevents duplicate — we handle it via profile.d)
+sed -i 's/^session\s*optional\s*pam_motd.so.*/# disabled/' /etc/pam.d/sshd 2>/dev/null || true
+sed -i 's/^session\s*required\s*pam_motd.so.*/# disabled/' /etc/pam.d/sshd 2>/dev/null || true
+
+# Blank /etc/motd so nothing else prints it
+> /etc/motd
+
 # Generate host keys if missing
 ssh-keygen -A 2>/dev/null
 
@@ -35,7 +42,7 @@ CPUS=$(nproc)
 DISK=$(df -h /home 2>/dev/null | awk 'NR==2 {print $2}')
 STARTED=$(date '+%a %b %e %H:%M:%S %Z %Y')
 
-cat /etc/motd > /etc/motd.dynamic
+cat /usr/share/nst-motd-base > /etc/motd.dynamic
 cat >> /etc/motd.dynamic << MOTD
 
   Instance:    $INSTANCE_NAME
@@ -47,17 +54,14 @@ cat >> /etc/motd.dynamic << MOTD
 
 MOTD
 
-# --- Dynamic section (runs on every login) ---
+# --- Dynamic section: runs on every login via profile.d ---
 cat > /etc/profile.d/nst-motd.sh << 'PROFILE'
+cat /etc/motd.dynamic 2>/dev/null
 echo "  Uptime:     $(uptime -p)"
 echo "  Load:       $(cut -d' ' -f1-3 /proc/loadavg)"
 echo ""
 PROFILE
 chmod +x /etc/profile.d/nst-motd.sh
-
-# Show static MOTD on login
-echo 'cat /etc/motd.dynamic 2>/dev/null' > /etc/profile.d/nst-banner.sh
-chmod +x /etc/profile.d/nst-banner.sh
 
 # Start SSH in foreground
 exec /usr/sbin/sshd -D -e
