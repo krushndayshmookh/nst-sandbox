@@ -97,7 +97,12 @@
                                 <td>{{ inst.last_accessed || 'never' }}</td>
                                 <td>{{ inst.ephemeral ? 'Yes (' + inst.expires_at + ')' : 'No' }}</td>
                                 <td>
-                                    <button @click="deleteInstance(inst.id)" title="Delete">🗑️</button>
+                                    <button @click="restartInstance(inst.id)" title="Restart" :disabled="inst._restarting">
+                                        {{ inst._restarting ? 'Restarting...' : 'Restart' }}
+                                    </button>
+                                    <button @click="stopInstance(inst.id)" title="Stop" v-if="inst.status === 'running'">Stop</button>
+                                    <button @click="startInstance(inst.id)" title="Start" v-if="inst.status === 'stopped'">Start</button>
+                                    <button @click="deleteInstance(inst.id)" title="Delete" style="color:red">Delete</button>
                                 </td>
                             </tr>
                         </tbody>
@@ -229,6 +234,30 @@
             async function fetchImages() { const d = await api('GET', '/admin/api/images'); if (d.ok) images.value = d.images; }
             async function fetchConfig() { const d = await api('GET', '/admin/api/config'); if (d.ok) config.value = d.config; }
 
+            async function restartInstance(name) {
+                const inst = instances.value.find(i => i.id === name);
+                if (!inst) return;
+                inst._restarting = true;
+                await api('POST', `/admin/api/instances/${name}/stop`);
+                await new Promise(r => setTimeout(r, 2000));
+                await api('POST', `/admin/api/instances/${name}/start`);
+                inst._restarting = false;
+                fetchInstances();
+                fetchStats();
+            }
+
+            async function stopInstance(name) {
+                await api('POST', `/admin/api/instances/${name}/stop`);
+                fetchInstances();
+                fetchStats();
+            }
+
+            async function startInstance(name) {
+                await api('POST', `/admin/api/instances/${name}/start`);
+                fetchInstances();
+                fetchStats();
+            }
+
             async function deleteInstance(name) {
                 if (!confirm(`Delete instance "${name}"?`)) return;
                 await api('DELETE', `/admin/api/instances/${name}`);
@@ -300,7 +329,6 @@
                 selected.value = e.target.checked ? filteredInstances.value.map(i => i.id) : [];
             }
 
-            // Auto-login if key in session
             onMounted(() => {
                 if (adminKey.value) login();
             });
@@ -309,6 +337,7 @@
                 adminKey, authenticated, authError, view,
                 stats, instances, images, config, filter, selected, newImage,
                 login, logout, fetchInstances, fetchImages, fetchConfig, fetchStats,
+                restartInstance, stopInstance, startInstance,
                 deleteInstance, bulkDelete, deleteAll, purge,
                 addImage, toggleImage, saveConfig,
                 filteredInstances, allSelected, toggleAll,
