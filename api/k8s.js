@@ -13,9 +13,9 @@ const TEMPLATE_PATH = path.join(__dirname, '..', 'k8s', 'instance-template.yaml'
 // ── Compute tier definitions ──────────────────────────────────────────────────
 // Aligned with ARCHITECTURE.md Section 6.
 const TIERS = {
-  T1: { cpu_req: '100m',  cpu_lim: '500m',  mem_req: '128Mi', mem_lim: '512Mi', label: '0.5 vCPU, 512MB RAM' },
-  T2: { cpu_req: '250m',  cpu_lim: '1000m', mem_req: '256Mi', mem_lim: '1Gi',   label: '1 vCPU, 1GB RAM' },
-  T3: { cpu_req: '500m',  cpu_lim: '2000m', mem_req: '512Mi', mem_lim: '2Gi',   label: '2 vCPU, 2GB RAM' },
+  T1: { cpu_req: '10m',   cpu_lim: '500m',  mem_req: '128Mi', mem_lim: '512Mi', label: '0.5 vCPU, 512MB RAM' },
+  T2: { cpu_req: '50m',   cpu_lim: '1000m', mem_req: '256Mi', mem_lim: '1Gi',   label: '1 vCPU, 1GB RAM' },
+  T3: { cpu_req: '100m',  cpu_lim: '2000m', mem_req: '512Mi', mem_lim: '2Gi',   label: '2 vCPU, 2GB RAM' },
 };
 
 // ── Storage tier definitions ──────────────────────────────────────────────────
