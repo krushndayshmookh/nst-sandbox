@@ -102,6 +102,7 @@
                                     </button>
                                     <button @click="stopInstance(inst.id)" title="Stop" v-if="inst.status === 'running'">Stop</button>
                                     <button @click="startInstance(inst.id)" title="Start" v-if="inst.status === 'stopped'">Start</button>
+                                    <a :href="'http://' + inst.id + '.nstsdc.org' " target="_blank"><button title="Open URL">Open</button></a>
                                     <button @click="deleteInstance(inst.id)" title="Delete" style="color:red">Delete</button>
                                 </td>
                             </tr>
