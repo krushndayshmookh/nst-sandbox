@@ -23,7 +23,7 @@ if ! id "$USERNAME" &>/dev/null; then
     </style>
 </head>
 <body>
-    <h1>🎓 Welcome to your NST Sandbox!</h1>
+    <h1>Welcome to your NST Sandbox!</h1>
     <p>This page is served from <code>~/public/index.html</code>.</p>
     <div class="box">
         <strong>Static site:</strong> Put your files in <code>~/public/</code><br>
@@ -40,7 +40,8 @@ sudo nginx -s stop
 node app.js    # must listen on port 80
 python -m http.server 80
     </pre>
-    <p>Your site is live at this URL. Happy building! 🚀</p>
+    <p>Your site is live at this URL. Happy building!</p>
+    <p><img width="96" height="96" src="https://img.icons8.com/external-beshi-flat-kerismaker/96/external-Rocket-startup-beshi-flat-kerismaker.png" alt="external-Rocket-startup-beshi-flat-kerismaker"/></p>
 </body>
 </html>
 WELCOME
